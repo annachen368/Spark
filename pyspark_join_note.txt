@@ -1,0 +1,135 @@
+sudo easy_install ipython==1.2.1
+Launch pyspark with IPython
+
+Every time you need to open the pyspark shell, open a terminal and type:
+
+PYSPARK_DRIVER_PYTHON=ipython pyspark
+
+Welcome to
+      ____              __
+     / __/__  ___ _____/ /__
+    _\ \/ _ \/ _ `/ __/  '_/
+   /__ / .__/\_,_/_/ /_/\_\   version 1.3.0
+      /_/
+
+Using Python version 2.6.6 (r266:84292, Feb 22 2013 00:00:18)
+SparkContext available as sc, HiveContext available as sqlCtx.
+
+In [1]: sc.version
+Out[1]: u'1.3.0'
+
+In [4]: integer_RDD = sc.parallelize(range(10),3)
+
+// check partitions: get all data on the driver
+In [5]: integer_RDD.collect()
+Out[5]: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+
+// check partitions: maintain splitting in partitions
+In [7]: integer_RDD.glom().collect()
+Out[7]: [[0, 1, 2], [3, 4, 5], [6, 7, 8, 9]]
+
+// Read text into Spark from local filesystem
+In [8]: text_RDD = sc.textFile("file://home/cloudera/file1")
+
+<in Terminal>
+[cloudera@quickstart ~]$ hdfs dfs -mkdir input
+[cloudera@quickstart ~]$ hdfs dfs -ls
+Found 1 items
+drwxr-xr-x   - cloudera cloudera          0 2016-01-21 17:16 input
+[cloudera@quickstart ~]$ hdfs dfs -put file1 input/
+[cloudera@quickstart ~]$ hdfs dfs -ls input
+Found 1 items
+-rw-r--r--   1 cloudera cloudera        153 2016-01-21 17:17 input/file1
+
+// Read text into Spark from local filesystem from HDFS
+ In [10]: text_RDD = sc.textFile("input/file1")
+// outputs the first line
+ In [11]: text_RDD.take(1)
+ Out[11]: [u'Hello this is my first file when I am learning how to read test into Spark. By the way, this is the interactive mode in the Spark environment in Python.']
+
+//coalesce: reduce the number of partitions
+In [3]: sc.parallelize(range(10),4).glom().collect()
+Out[3]: [[0, 1], [2, 3], [4, 5], [6, 7, 8, 9]]
+
+join1_FileA.txt
+
+able,991
+about,11
+burger,15
+actor,22
+join1_FileB.txt
+
+Jan-01 able,5
+Feb-02 about,3
+Mar-03 about,8
+Apr-04 able,13
+Feb-22 actor,3
+Feb-23 burger,5
+Mar-08 burger,2
+Dec-15 able,100
+
+fileA = sc.textFile("input/join1_FileA.txt")
+Let's make sure the file content is correct:
+
+fileA.collect()
+should return:
+
+Out[]: [u'able,991', u'about,11', u'burger,15', u'actor,22']
+Then load the second dataset:
+
+fileB = sc.textFile("input/join1_FileB.txt")
+
+def split_fileA(line):
+    # split the input line in word and count on the comma
+    split = line.split(",")
+	word = split[0]
+    # turn the count to an integer  
+    count = int(split[1])
+    return (word, count)
+	
+In [28]: def split_fileA(line):
+   ....:         # split the input line in word and count on the comma
+   ....:         split = line.split(",")
+   ....:        word = split[0]
+   ....:         # turn the count to an integer  
+   ....:         count = int(split[1])
+   ....:         return (word, count)
+   ....: 
+
+In [29]: split_fileA(test_line)
+Out[29]: ('able', 991)
+
+Now we can proceed on running the map transformation to the fileA RDD:
+
+fileA_data = fileA.map(split_fileA)
+If the mapper is implemented correctly, you should get this result:
+
+fileA_data.collect()
+Out[]: [(u'able', 991), (u'about', 11), (u'burger', 15), (u'actor', 22)]
+
+def split_fileB(line):
+    # split the input line into word, date and count_string
+    split1 = line.split(" ")
+	date = split1[0]
+	split2 = split1[1].split(",")
+	word = split2[0]
+	count_string = split2[1]
+    return (word, date + " " + count_string) 
+	
+fileB_data = fileB.map(split_fileB)
+and then gathering the output back to the pyspark Driver console:
+
+fileB_data.collect()
+
+Run join
+The goal is to join the two datasets using the words as keys and print for each word the wordcount for a specific date and then the total output from A.
+
+Basically for each word in fileB, we would like to print the date and count from fileB but also the total count from fileA.
+
+Spark implements the join transformation that given a RDD of (K, V) pairs to be joined with another RDD of (K, W) pairs, returns a dataset that contains (K, (V, W)) pairs.
+
+fileB_joined_fileA = fileB_data.join(fileA_data)
+Verify the result
+You can inspect the full result with:
+
+fileB_joined_fileA.collect()
